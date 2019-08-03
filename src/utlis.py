@@ -56,4 +56,52 @@ def pad_image(x):
     volume = np.pad(volume, padding, mode='constant', constant_values=0)
     return volume, mask
 
+def resize_image(x, size=256):
+    volume, mask = x
+    v_shape = volume.shape
+    out_shape = (v_shape[0], size, size)
+    mask = resize(mask, out_shape=out_shape, order=0, mode='constant', cval=0, anti_aliasing=False)
+    out_shape = out_shape + (v_shape[3],)
+    volume = resize(volume, out_shape=out_shape, order=2, mode='constant', cval=0, anti_aliasing=False)
+    return volume, mask
+
+def normalize_image(volume):
+    p10 = np.percentile(volume, 10)
+    p99 = np.percentile(volume, 99)
+    volume = rescale_intensity(volume, in_range=(p10, p99))
+    m = np.mean(volume, axis=(0, 1, 2))
+    s = np.std(volume, axis=(0, 1, 2))
+    volume = (volume - m ) / s
+    return volume
+
+def log_image(x, y_true, y_pred, channel=1):
+    images = []
+    x_np = x[:, channel].cpu().numpy()
+    y_true_np = y_true[:, 0].cpu().numpy()
+    y_pred_np = y_pred[:, 0].cpu().numpy()
+    for i in range(x_np.shape[0]):
+        image = gray2rgb(np.squeeze(x_np[i]))
+        image = outline(image, y_pred_np[i], color=[255, 0, 0])
+        image = outline(image, y_true_np[i], color=[0, 255, 0])
+        images.append(image)
+    return images
+
+def gray2rgb(image):
+    w, h = image.shape
+    image += np.abs(np.mim(image))
+    image_max = np.abs(np.max(image))
+    if image_max > 0:
+        image /= image_max
+    ret = np.empty((w, h, 3), dtype=np.uint8)
+    ret[:,:,2] = ret[:,:,1] = ret[:,:,0] = image *255
+    return ret
+
+def outline(image, mask, color):
+    mask = np.round(mask)
+    yy, xx = np.nonzero(mask)
+    for y, x in zip(yy, xx):
+        if 0.0 < np.mean(mask[max(0, y-1): y+2, max(0, x-1): x+2]) < 1.0:
+            image[max(0,y):y+1, max(0,x):x+1] = color
+    return image
+
 
